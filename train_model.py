@@ -1,5 +1,19 @@
 
 # %%
+import os
+
+# Some batch/container runtimes provide a numeric uid without a passwd entry.
+# Torch's inductor cache initialization calls getpass.getuser(), which crashes
+# in that case. Set explicit user/cache env vars before importing torch.
+# `setdefault` is not enough if vars exist but are empty strings.
+if not os.environ.get("USER"):
+    os.environ["USER"] = "condor"
+if not os.environ.get("LOGNAME"):
+    os.environ["LOGNAME"] = os.environ["USER"]
+if not os.environ.get("TORCHINDUCTOR_CACHE_DIR"):
+    os.environ["TORCHINDUCTOR_CACHE_DIR"] = f"/tmp/torchinductor_{os.getuid()}"
+os.makedirs(os.environ["TORCHINDUCTOR_CACHE_DIR"], exist_ok=True)
+
 from datetime import datetime
 current_time_str = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -49,12 +63,12 @@ print(f"torch.cuda.get_device_name(): {torch.cuda.get_device_name()}")
 
 
 # %%
-# login to Hugging Face
-login(token="hf_xxx")
+# # login to Hugging Face
+# login(token="hf_xxx")
 
-# %%
-# login to WANDB
-wandb.login(key="xxx")
+# # %%
+# # login to WANDB
+# wandb.login(key="xxx")
 
 # %%
 model_id = "facebook/mms-300m"

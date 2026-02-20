@@ -1,10 +1,16 @@
 FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
-COPY . /app
-
-
-RUN pip install -r requirements.txt
 COPY requirements.txt /app/
 
-CMD ["python3", "train_model.py"]
+RUN uv venv && . /app/.venv/bin/activate
+RUN uv pip install -r requirements.txt
+
+COPY . /app
+RUN uv pip install -r requirements_extra.txt
+
+
+ENV PATH="/app/.venv/bin:${PATH}"
+
+CMD ["python", "train_model.py"]
