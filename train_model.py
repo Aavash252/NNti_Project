@@ -1,6 +1,27 @@
 
 # %%
 import os
+# Force all HF/Transformers/Datasets caches to a writable location
+CACHE_ROOT = f"/tmp/hf_{os.getuid()}"
+os.environ["HOME"] = "/tmp"
+os.environ["XDG_CACHE_HOME"] = "/tmp/.cache"
+os.environ["HF_HOME"] = CACHE_ROOT
+os.environ["HF_HUB_CACHE"] = os.path.join(CACHE_ROOT, "hub")
+os.environ["HUGGINGFACE_HUB_CACHE"] = os.path.join(CACHE_ROOT, "hub")
+os.environ["TRANSFORMERS_CACHE"] = os.path.join(CACHE_ROOT, "transformers")
+os.environ["HF_DATASETS_CACHE"] = os.path.join(CACHE_ROOT, "datasets")
+os.environ["TORCH_HOME"] = os.path.join(CACHE_ROOT, "torch")
+
+for k in [
+    "XDG_CACHE_HOME",
+    "HF_HOME",
+    "HF_HUB_CACHE",
+    "HUGGINGFACE_HUB_CACHE",
+    "TRANSFORMERS_CACHE",
+    "HF_DATASETS_CACHE",
+    "TORCH_HOME",
+]:
+    os.makedirs(os.environ[k], exist_ok=True)
 
 # Some batch/container runtimes provide a numeric uid without a passwd entry.
 # Torch's inductor cache initialization calls getpass.getuser(), which crashes

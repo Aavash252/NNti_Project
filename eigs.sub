@@ -1,0 +1,18 @@
+universe = docker
+docker_image = aavash2520/nnti_proj
+
+executable = /bin/bash
+arguments  = run.sh 
+transfer_input_files = run.sh
+should_transfer_files    = YES
+when_to_transfer_output  = ON_EXIT
+output                   = results/$(ClusterId).$(ProcId).out
+error                    = results/$(ClusterId).$(ProcId).err
+log                      = results/$(ClusterId).$(ProcId).log
+request_cpus             = 1
+request_gpus = 1
+request_memory           = 512M
+requirements = UidDomain == "cs.uni-saarland.de"
+
+
+
