@@ -1,18 +1,24 @@
 universe = docker
-docker_image = aavash2520/nnti_proj
+docker_image = aavash2520/nnti_proj1
 
-executable = /bin/bash
-arguments  = run.sh 
-transfer_input_files = run.sh
+executable =/usr/bin/python3
+arguments  = train_model.py
+transfer_input_files = train_model.py
 should_transfer_files    = YES
 when_to_transfer_output  = ON_EXIT
 output                   = results/$(ClusterId).$(ProcId).out
 error                    = results/$(ClusterId).$(ProcId).err
 log                      = results/$(ClusterId).$(ProcId).log
-request_cpus             = 1
-request_gpus = 1
-request_memory           = 512M
+request_GPUs = 1
+request_CPUs = 1
+request_memory = 1G
+
 requirements = UidDomain == "cs.uni-saarland.de"
 
+getenv = HOME
++WantGPUHomeMounted = true
++WantScratchMounted = true
+
+queue
 
 

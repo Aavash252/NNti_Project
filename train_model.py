@@ -1,40 +1,5 @@
 
 # %%
-import os
-# Force all HF/Transformers/Datasets caches to a writable location
-CACHE_ROOT = f"/tmp/hf_{os.getuid()}"
-os.environ["HOME"] = "/tmp"
-os.environ["XDG_CACHE_HOME"] = "/tmp/.cache"
-os.environ["HF_HOME"] = CACHE_ROOT
-os.environ["HF_HUB_CACHE"] = os.path.join(CACHE_ROOT, "hub")
-os.environ["HUGGINGFACE_HUB_CACHE"] = os.path.join(CACHE_ROOT, "hub")
-os.environ["TRANSFORMERS_CACHE"] = os.path.join(CACHE_ROOT, "transformers")
-os.environ["HF_DATASETS_CACHE"] = os.path.join(CACHE_ROOT, "datasets")
-os.environ["TORCH_HOME"] = os.path.join(CACHE_ROOT, "torch")
-
-for k in [
-    "XDG_CACHE_HOME",
-    "HF_HOME",
-    "HF_HUB_CACHE",
-    "HUGGINGFACE_HUB_CACHE",
-    "TRANSFORMERS_CACHE",
-    "HF_DATASETS_CACHE",
-    "TORCH_HOME",
-]:
-    os.makedirs(os.environ[k], exist_ok=True)
-
-# Some batch/container runtimes provide a numeric uid without a passwd entry.
-# Torch's inductor cache initialization calls getpass.getuser(), which crashes
-# in that case. Set explicit user/cache env vars before importing torch.
-# `setdefault` is not enough if vars exist but are empty strings.
-if not os.environ.get("USER"):
-    os.environ["USER"] = "condor"
-if not os.environ.get("LOGNAME"):
-    os.environ["LOGNAME"] = os.environ["USER"]
-if not os.environ.get("TORCHINDUCTOR_CACHE_DIR"):
-    os.environ["TORCHINDUCTOR_CACHE_DIR"] = f"/tmp/torchinductor_{os.getuid()}"
-os.makedirs(os.environ["TORCHINDUCTOR_CACHE_DIR"], exist_ok=True)
-
 from datetime import datetime
 current_time_str = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -48,6 +13,10 @@ import pandas as pd
 import numpy as np
 import torch
 import wandb
+import os, tarfile
+from pathlib import Path
+from transformers import set_seed
+set_seed(42)
 
 from datasets import (
     load_dataset, 
@@ -67,7 +36,8 @@ from transformers import (
     DataCollatorWithPadding,
     TrainingArguments,
     Trainer,
-    set_seed
+    set_seed,
+    EarlyStoppingCallback
 )
 
 from huggingface_hub import login
@@ -77,19 +47,26 @@ import evaluate
 
 # %%
 # check if there GPU
-print("Check if GPU available:")
-print(f"torch.cuda.is_available(): {torch.cuda.is_available()}")
-print(f"torch.cuda.get_device_name(): {torch.cuda.get_device_name()}")
+print("Checking Hardware...")
+cuda_available = torch.cuda.is_available()
+print(f"torch.cuda.is_available(): {cuda_available}")
+
+if cuda_available:
+    print(f"torch.cuda.get_device_name(): {torch.cuda.get_device_name(0)}")
+    device = torch.device("cuda")
+else:
+    print("No NVIDIA GPU detected. Falling back to CPU for this run.")
+    device = torch.device("cpu")
 
 
 
 # %%
-# # login to Hugging Face
+# login to Hugging Face
 # login(token="hf_xxx")
 
-# # %%
-# # login to WANDB
-# wandb.login(key="xxx")
+# %%
+# login to WANDB
+# wandb.login(key="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")
 
 # %%
 model_id = "facebook/mms-300m"
@@ -113,7 +90,7 @@ print(f"dataset['train']: {dataset['train']}")
 
 # %%
 # check the strucutre of one training sample (before decoding)
-print(f"dataset['train'][0]: {dataset['train'][0]}")
+# print(f"dataset['train'][0]: {dataset['train'][0]}")
 
 # %%
 # shuffle the dataset
@@ -137,14 +114,20 @@ max_duration = 7 # in seconds
 
 # %%
 # get the set of languages
-LABELS = train_ds.unique('language')
+# Get stable, sorted list of language labels
+LABELS = sorted(train_ds.unique("language"))
 
-sorted_labels = sorted(l.upper() for l in LABELS) 
-print(f"Languages: {sorted_labels}")
+print(f"Languages: {LABELS}")
 
-str_to_int = {
-    s: i for i, s in enumerate(LABELS)
-}
+# Create consistent mappings
+str_to_int = {label: idx for idx, label in enumerate(LABELS)}
+int_to_str = {idx: label for label, idx in str_to_int.items()}
+
+num_labels = len(LABELS)
+
+# str_to_int = {
+#     s: i for i, s in enumerate(LABELS)
+# }
 
 
 # %%
@@ -260,23 +243,24 @@ data_collator = AudioDataCollator(feature_extractor)
 # %%
 batch_size = 8
 gradient_accumulation_steps = 2
-num_train_epochs = 3
+num_train_epochs = 10
 lr = 0.00001
+warmup_ratio = 0.1
 
 # %%
-wandb.init(project="Indic-SLID", name=f"SLID_{model_id}_{lr}_{current_time_str}")
+# wandb.init(project="Indic-SLID", name=f"SLID_{model_id}_{lr}_{current_time_str}")
 
 # %%
 training_args = TrainingArguments(
     group_by_length=False,
     #run_name='SLID_1', 
-    report_to="wandb",  # enable logging to W&B
+    report_to="none",  # enable logging to W&B
     logging_steps=1,  # how often to log to W&B
     per_device_train_batch_size=batch_size, 
     per_device_eval_batch_size=batch_size,    
-    eval_strategy="steps",
+    eval_strategy="epoch",
     eval_steps=100,
-    save_strategy="steps", 
+    save_strategy="epoch", 
     save_steps=100,
     learning_rate=lr,
     gradient_accumulation_steps=gradient_accumulation_steps,
@@ -313,6 +297,7 @@ trainer = Trainer(
     processing_class=feature_extractor,
     data_collator=data_collator,  
     compute_metrics=compute_metrics,
+    callbacks=[EarlyStoppingCallback(early_stopping_patience=2)]
 )
 
 # %%
@@ -327,9 +312,20 @@ trainer.train()
 
 # %%
 print("Final evaluation starting...")
-trainer.evaluate()
+metrics = trainer.evaluate()
+print("EVAL METRICS:", metrics)
 
+save_dir = "improved_model"          # IMPORTANT: not ./results/...
+Path(save_dir).mkdir(parents=True, exist_ok=True)
 
-# save model to disk 
-save_dir = "./indic-SLID/inprogress"
-slid_model.save_pretrained(save_dir)
+trainer.model.save_pretrained(save_dir)
+feature_extractor.save_pretrained(save_dir)
+
+# pack into one file so Condor transfers it back reliably
+tar_path = "improved_model.tar.gz"
+with tarfile.open(tar_path, "w:gz") as tar:
+    tar.add(save_dir, arcname=save_dir)
+
+print("Saved improved model dir:", os.path.abspath(save_dir))
+print("Saved improved model tar:", os.path.abspath(tar_path))
+print("BEST_METRIC:", trainer.state.best_metric)

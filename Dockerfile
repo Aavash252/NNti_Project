@@ -1,3 +1,4 @@
+
 FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 
 LABEL maintainer="Hugging Face"
@@ -33,7 +34,7 @@ RUN python3 -m pip install --no-cache-dir \
     wandb==0.21.3 \
     hf_transfer
 
-
+# install other packages
 RUN python3 -m pip install --no-cache-dir \
     aiohttp==3.12.15 \
     filelock==3.13.1 \
@@ -54,3 +55,4 @@ RUN python3 -m pip install --no-cache-dir \
     soundfile==0.13.1 \
     tokenizers==0.21.4 \
     tqdm==4.67.1
+
