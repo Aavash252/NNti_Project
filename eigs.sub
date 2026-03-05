@@ -11,7 +11,7 @@ error                    = results/$(ClusterId).$(ProcId).err
 log                      = results/$(ClusterId).$(ProcId).log
 request_GPUs = 1
 request_CPUs = 1
-request_memory = 1G
+request_memory = 4G
 
 requirements = UidDomain == "cs.uni-saarland.de"
 

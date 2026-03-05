@@ -12,11 +12,7 @@ from collections import Counter
 import pandas as pd
 import numpy as np
 import torch
-import wandb
-import os, tarfile
-from pathlib import Path
-from transformers import set_seed
-set_seed(42)
+# import wandb
 
 from datasets import (
     load_dataset, 
@@ -40,23 +36,16 @@ from transformers import (
     EarlyStoppingCallback
 )
 
-from huggingface_hub import login
+# from huggingface_hub import login
 
 # import Hugging Face libraries
 import evaluate
 
 # %%
 # check if there GPU
-print("Checking Hardware...")
-cuda_available = torch.cuda.is_available()
-print(f"torch.cuda.is_available(): {cuda_available}")
-
-if cuda_available:
-    print(f"torch.cuda.get_device_name(): {torch.cuda.get_device_name(0)}")
-    device = torch.device("cuda")
-else:
-    print("No NVIDIA GPU detected. Falling back to CPU for this run.")
-    device = torch.device("cpu")
+print("Check if GPU available:")
+print(f"torch.cuda.is_available(): {torch.cuda.is_available()}")
+print(f"torch.cuda.get_device_name(): {torch.cuda.get_device_name()}")
 
 
 
@@ -66,7 +55,7 @@ else:
 
 # %%
 # login to WANDB
-# wandb.login(key="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")
+# wandb.login(key="xxx")
 
 # %%
 model_id = "facebook/mms-300m"
@@ -114,20 +103,14 @@ max_duration = 7 # in seconds
 
 # %%
 # get the set of languages
-# Get stable, sorted list of language labels
-LABELS = sorted(train_ds.unique("language"))
+LABELS = train_ds.unique('language')
 
-print(f"Languages: {LABELS}")
+sorted_labels = sorted(l.upper() for l in LABELS) 
+print(f"Languages: {sorted_labels}")
 
-# Create consistent mappings
-str_to_int = {label: idx for idx, label in enumerate(LABELS)}
-int_to_str = {idx: label for label, idx in str_to_int.items()}
-
-num_labels = len(LABELS)
-
-# str_to_int = {
-#     s: i for i, s in enumerate(LABELS)
-# }
+str_to_int = {
+    s: i for i, s in enumerate(LABELS)
+}
 
 
 # %%
@@ -241,11 +224,10 @@ class AudioDataCollator:
 data_collator = AudioDataCollator(feature_extractor)
 
 # %%
-batch_size = 8
-gradient_accumulation_steps = 2
-num_train_epochs = 10
+batch_size = 16
+gradient_accumulation_steps = 1
+num_train_epochs = 20
 lr = 0.00001
-warmup_ratio = 0.1
 
 # %%
 # wandb.init(project="Indic-SLID", name=f"SLID_{model_id}_{lr}_{current_time_str}")
@@ -266,7 +248,7 @@ training_args = TrainingArguments(
     gradient_accumulation_steps=gradient_accumulation_steps,
     num_train_epochs=num_train_epochs,
     weight_decay=0.01,
-    warmup_ratio=0.1,
+    warmup_ratio=0.2,
     load_best_model_at_end=True,
     metric_for_best_model="accuracy",
     greater_is_better=True,  # True if your metric should be maximized (like accuracy)
@@ -297,7 +279,7 @@ trainer = Trainer(
     processing_class=feature_extractor,
     data_collator=data_collator,  
     compute_metrics=compute_metrics,
-    callbacks=[EarlyStoppingCallback(early_stopping_patience=2)]
+    callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
 )
 
 # %%
@@ -312,20 +294,11 @@ trainer.train()
 
 # %%
 print("Final evaluation starting...")
-metrics = trainer.evaluate()
-print("EVAL METRICS:", metrics)
+trainer.evaluate()
 
-save_dir = "improved_model"          # IMPORTANT: not ./results/...
-Path(save_dir).mkdir(parents=True, exist_ok=True)
 
-trainer.model.save_pretrained(save_dir)
-feature_extractor.save_pretrained(save_dir)
-
-# pack into one file so Condor transfers it back reliably
-tar_path = "improved_model.tar.gz"
-with tarfile.open(tar_path, "w:gz") as tar:
-    tar.add(save_dir, arcname=save_dir)
-
-print("Saved improved model dir:", os.path.abspath(save_dir))
-print("Saved improved model tar:", os.path.abspath(tar_path))
-print("BEST_METRIC:", trainer.state.best_metric)
+# save model to disk 
+save_dir = "/home/neuronet_team288/NNti_Project"
+trainer.save_model(save_dir)                    # saves model + feature extractor together
+feature_extractor.save_pretrained(save_dir)     # explicit backup
+print(f"✓ Saved to {save_dir}")
